@@ -10,6 +10,9 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
+# Import plugin's version
+from retrosynthesis.constants import PLUGIN_VERSION
+
 # Get current path
 here = path.abspath(path.dirname(__file__))
 
@@ -25,7 +28,7 @@ with open('requirements.txt') as f:
 # Fields marked as "Optional" may be commented out.
 setup(
     name='scipion-chem-retrosynthesis',  # Required
-    version='0.1',  # Required
+    version=PLUGIN_VERSION,  # Required
     description='Scipion framework plugin for the use of retrosynthesis software tools',  # Required
     long_description=long_description,  # Optional
     url='https://github.com/scipion-chem/scipion-chem-retrosynthesis',  # Optional
