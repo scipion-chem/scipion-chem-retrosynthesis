@@ -28,7 +28,7 @@
 import pwchem
 
 # Plugin imports
-from .constants import PLUGIN_VERSION
+from .constants import PLUGIN_VERSION, AIZYNTHFINDER_DIC
 
 _version_ = PLUGIN_VERSION
 _logo = ""
@@ -38,6 +38,7 @@ class Plugin(pwchem.Plugin):
     @classmethod
     def _defineVariables(cls):
         """ Return and write a variable in the config file. """
+        cls._defineEmVar(AIZYNTHFINDER_DIC['home'], '{}-{}'.format(AIZYNTHFINDER_DIC['name'], AIZYNTHFINDER_DIC['version']))
 
     @classmethod
     def defineBinaries(cls, env):

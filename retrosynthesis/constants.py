@@ -28,3 +28,6 @@
 # Version constants
 V1_0 = '1.0'
 PLUGIN_VERSION = '0.1'
+
+# Package dictionaries
+AIZYNTHFINDER_DIC = {'name': 'aizynthfinder', 'version': '3.7.0', 'home': 'AIZYNTHFINDER_HOME'}
