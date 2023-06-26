@@ -24,6 +24,9 @@
 # *
 # **************************************************************************
 
+# Scipion em imports
+from scipion.install.funcs import InstallHelper
+
 # Scipion chem imports
 import pwchem
 
@@ -35,11 +38,23 @@ _logo = ""
 _references = ['']
 
 class Plugin(pwchem.Plugin):
-    @classmethod
-    def _defineVariables(cls):
-        """ Return and write a variable in the config file. """
-        cls._defineEmVar(AIZYNTHFINDER_DIC['home'], '{}-{}'.format(AIZYNTHFINDER_DIC['name'], AIZYNTHFINDER_DIC['version']))
+	@classmethod
+	def _defineVariables(cls):
+		""" Return and write a variable in the config file. """
+		cls._defineEmVar(AIZYNTHFINDER_DIC['home'], '{}-{}'.format(AIZYNTHFINDER_DIC['name'], AIZYNTHFINDER_DIC['version']))
 
-    @classmethod
-    def defineBinaries(cls, env):
-        pass
+	@classmethod
+	def defineBinaries(cls, env):
+		""" Install the necessary packages. """
+		cls.addAizynthfinder(env)
+
+	########################### PACKAGE FUNCTIONS ###########################
+	@classmethod
+	def addAizynthfinder(cls, env, default=True):
+		""" This function installs Aizynthfinder's package. """
+		# Instantiating install helper
+		installer = InstallHelper(AIZYNTHFINDER_DIC['name'], packageHome=cls.getVar(AIZYNTHFINDER_DIC['home']), packageVersion=AIZYNTHFINDER_DIC['version'])
+
+		# Installing package
+		installer.getCondaEnvCommand(pythonVersion='3.8', extraCommands=['python -m pip install aizynthfinder[all]'])\
+			.addPackage(env, dependencies=['conda'], default=default)
