@@ -24,12 +24,14 @@
 # *
 # **************************************************************************
 
+# Scipion em imports
+from scipion.install.funcs import InstallHelper
+
 # Scipion chem imports
 import pwchem
 
 # Plugin imports
 from .constants import PLUGIN_VERSION, AIZYNTHFINDER_DIC
-from .install_helper import InstallHelper
 
 _version_ = PLUGIN_VERSION
 _logo = ""
