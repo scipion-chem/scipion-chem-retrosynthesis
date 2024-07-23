@@ -1,0 +1,7 @@
+scipion-pyworkflow
+scipion-em
+scipion-chem
+pandas
+aizynthfinder
+rdkit
+
