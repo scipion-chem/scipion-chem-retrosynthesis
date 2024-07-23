@@ -25,6 +25,8 @@
 # **************************************************************************
 
 # Scipion em imports
+import os, subprocess
+from subprocess import run
 from scipion.install.funcs import InstallHelper
 
 # Scipion chem imports
@@ -48,6 +50,10 @@ class Plugin(pwchem.Plugin):
 		""" Install the necessary packages. """
 		cls.addAizynthfinder(env)
 
+	@classmethod
+	def getHome(cls):
+		return cls.getVar(AIZYNTHFINDER_DIC['home'])
+
 	########################### PACKAGE FUNCTIONS ###########################
 	@classmethod
 	def addAizynthfinder(cls, env, default=True):
@@ -55,6 +61,19 @@ class Plugin(pwchem.Plugin):
 		# Instantiating install helper
 		installer = InstallHelper(AIZYNTHFINDER_DIC['name'], packageHome=cls.getVar(AIZYNTHFINDER_DIC['home']), packageVersion=AIZYNTHFINDER_DIC['version'])
 
+	
 		# Installing package
-		installer.getCondaEnvCommand(pythonVersion='3.8', extraCommands=['python -m pip install aizynthfinder[all]'])\
-			.addPackage(env, dependencies=['conda'], default=default)
+		'''installer.getCondaEnvCommand(pythonVersion='3.9', extraCommands=['python -m pip install aizynthfinder[all]'])\
+			.addPackage(env, dependencies=['conda'], default=default)'''
+		installer.getCondaEnvCommand(binaryName=AIZYNTHFINDER_DIC['name'], binaryVersion=AIZYNTHFINDER_DIC['version']) \
+		.addCommand(f'{cls.getEnvActivationCommand(AIZYNTHFINDER_DIC)} && pip install aizynthfinder[all] && download_public_data .')\
+		.addPackage(env, dependencies=['conda'], default=default)
+
+
+
+	@classmethod
+	def runAIZYNTH(cls, program, args, cwd=None):
+		""" Run AIZYNTH command from a given protocol. """
+		full_program = '%s && %s ' % (cls.getEnvActivationCommand(AIZYNTHFINDER_DIC), program)
+		print('full_program ', full_program)
+		run(full_program + args, env=cls.getEnviron(), cwd=cwd, shell=True)
