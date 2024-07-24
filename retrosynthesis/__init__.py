@@ -76,6 +76,16 @@ class Plugin(pwchem.Plugin):
 		print('full_program ', full_program)
 		run(full_program + args, env=cls.getEnviron(), cwd=cwd, shell=True)
 
+	@classmethod
+	def getPluginH(cls, path=""):
+		import retrosynthesis
+		fnDir = os.path.split(retrosynthesis.__file__)[0]
+		return os.path.join(fnDir, path)
+	
+	@classmethod
+	def getScriptsPath(cls):
+		return cls.getPluginH('scripts/')
+
 
 
 	

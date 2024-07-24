@@ -113,9 +113,7 @@ class ProtChemAiZynthFinder(EMProtocol):
         outDir = os.path.abspath(self._getExtraPath())
         jsonPath= os.path.abspath(self._getExtraPath("output.json"))
         args = '{} {}'.format(jsonPath, outDir)
-        for root, dirs, files in os.walk('/'):
-            if "retrosynthesis_script.py" in files:
-              scriptPath=  os.path.join(root, "")
+        scriptPath=Plugin.getScriptsPath()
         Plugin.runScript(self, "retrosynthesis_script.py" ,args, env=AIZYNTHFINDER_DIC,cwd=None, scriptDir=scriptPath)
         cleanPath(fnJson)
 
