@@ -1,7 +1,9 @@
 ################ VERÓNICA GAMO PAREJO ##############################
 
 # General imports 
+import gzip
 import re
+import shutil
 import os,sys,glob, time
 import subprocess
 import json
@@ -12,21 +14,17 @@ from pyworkflow.protocol.params import PathParam, PointerParam, STEPS_PARALLEL, 
 from pwem.protocols import EMProtocol
 from pyworkflow.utils.path import moveFile, cleanPath
 from pwchem.utils import *
-from pwchem import Plugin
 from pwchem.wizards import SelectElementWizard
 from retrosynthesis import Plugin
 from pwchem.constants import RDKIT_DIC
 import pyworkflow.object as pwobj
 import pandas as pd
-from aizynthfinder.reactiontree import ReactionTree
 from pwchem.objects import SmallMolecule, SetOfSmallMolecules
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from urllib.request import urlopen
-from aizynthfinder.aizynthfinder import AiZynthExpander, AiZynthFinder
-from aizynthfinder.context.config import Configuration
-
 from retrosynthesis.constants import AIZYNTHFINDER_DIC
+
 
 RDKIT = 0
 
@@ -108,26 +106,17 @@ class ProtChemAiZynthFinder(EMProtocol):
         #JSON FILE 
         fnJson = self._getExtraPath("output.json.gz")
         moveFile("output.json.gz", fnJson)
+        with gzip.open(fnJson, 'rb') as f_in:
+            with open(self._getExtraPath("output.json"), 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
 
-
-        #CREATE IMAGES ROUTES
-        data = pd.read_json(fnJson, orient="table")
-        data.to_json(self._getExtraPath("output.json"), orient='table')
-        if not data.empty and 'trees' in data.columns:
-            all_trees = data['trees'].values
-            if len(all_trees) > 0:
-                trees_for_first_target = all_trees[0]
-                if isinstance(trees_for_first_target, list):
-                    for itree, tree in enumerate(trees_for_first_target):
-                        if isinstance(tree, dict):
-                            imagefile = os.path.join(self._getExtraPath(), f"route{itree:03d}.png")
-                            ReactionTree.from_dict(tree).to_image().save(imagefile)
-                        else:
-                            print(f"Skipping non-dict tree at index {itree}")
-                else:
-                    print("Expected a list of trees, got:", type(trees_for_first_target))
-
-
+        outDir = os.path.abspath(self._getExtraPath())
+        jsonPath= os.path.abspath(self._getExtraPath("output.json"))
+        args = '{} {}'.format(jsonPath, outDir)
+        for root, dirs, files in os.walk('/'):
+            if "retrosynthesis_script.py" in files:
+              scriptPath=  os.path.join(root, "")
+        Plugin.runScript(self, "retrosynthesis_script.py" ,args, env=AIZYNTHFINDER_DIC,cwd=None, scriptDir=scriptPath)
         cleanPath(fnJson)
 
 
