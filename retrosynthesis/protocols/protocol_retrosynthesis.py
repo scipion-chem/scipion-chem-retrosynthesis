@@ -10,11 +10,10 @@ import json
 import requests
 
 # Specific imports
-from pyworkflow.protocol.params import PathParam, PointerParam, STEPS_PARALLEL, StringParam
+from pyworkflow.protocol.params import PointerParam, STEPS_PARALLEL, StringParam
 from pwem.protocols import EMProtocol
 from pyworkflow.utils.path import moveFile, cleanPath
 from pwchem.utils import *
-from pwchem.wizards import SelectElementWizard
 from retrosynthesis import Plugin
 from pwchem.constants import RDKIT_DIC
 import pyworkflow.object as pwobj
@@ -46,20 +45,19 @@ class ProtChemAiZynthFinder(EMProtocol):
                       label='Set of molecules to use:', allowsNull=False,
                       help='Select the set of small molecules for retrosynthesis.')
         
-        form.addParam('inputLigand', StringParam, label='Selected just one ligand file (relative path):', allowsNull=False,
+        form.addParam('inputLigand', StringParam, label='Selected just one ligand file:',
                       help='Relative path to the ligand file for the retrosynthesis.')
+        
                    
     def _insertAllSteps(self):
         self._insertFunctionStep('identifyStep')
         self._insertFunctionStep('createOutputStep')
 
     def identifyStep(self):
-        SelectElementWizard().addTarget(protocol=self, 
-                                        targets=['inputLigand'], 
-                                        inputs=['inputSet'], 
-                                        outputs=['inputLigand'])
-
-        ligand_file = self.inputLigand.get()
+        myLigand=str(self.inputLigand)
+        for mol in self.inputSet.get():
+            if str(mol.getMolName()) in myLigand:
+                ligand_file=mol.getFileName()
         if not ligand_file:
             raise ValueError("No ligand file provided.")
         
@@ -142,7 +140,7 @@ class ProtChemAiZynthFinder(EMProtocol):
         for smile in smiles_list:
             mol = Chem.MolFromSmiles(smile)
             if mol is not None:
-                file_name=f"Molecule {molecule_counter}"
+                file_name=f"Molecule_{molecule_counter}"
                 sdf_filename = os.path.join(self._getExtraPath(), f"{file_name}.sdf")
 
                 try:
