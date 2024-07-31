@@ -73,7 +73,6 @@ class Plugin(pwchem.Plugin):
 	def runAIZYNTH(cls, program, args, cwd=None):
 		""" Run AIZYNTH command from a given protocol. """
 		full_program = '%s && %s ' % (cls.getEnvActivationCommand(AIZYNTHFINDER_DIC), program)
-		print('full_program ', full_program)
 		run(full_program + args, env=cls.getEnviron(), cwd=cwd, shell=True)
 
 	@classmethod

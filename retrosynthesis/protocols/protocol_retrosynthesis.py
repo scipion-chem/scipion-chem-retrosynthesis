@@ -4,7 +4,7 @@
 import gzip
 import re
 import shutil
-import os,sys,glob, time
+import os,sys,glob
 import subprocess
 import json
 import requests
@@ -17,10 +17,7 @@ from pwchem.utils import *
 from retrosynthesis import Plugin
 from pwchem.constants import RDKIT_DIC
 import pyworkflow.object as pwobj
-import pandas as pd
 from pwchem.objects import SmallMolecule, SetOfSmallMolecules
-from rdkit import Chem
-from rdkit.Chem import AllChem
 from urllib.request import urlopen
 from retrosynthesis.constants import AIZYNTHFINDER_DIC
 
@@ -138,23 +135,20 @@ class ProtChemAiZynthFinder(EMProtocol):
         smiles_to_molecule_info = {}
         print("-----------------INITIAL REACTANTS------------------")
         for smile in smiles_list:
-            mol = Chem.MolFromSmiles(smile)
-            if mol is not None:
                 file_name=f"Molecule_{molecule_counter}"
-                sdf_filename = os.path.join(self._getExtraPath(), f"{file_name}.sdf")
-
-                try:
-                    writer = Chem.SDWriter(sdf_filename)
-                    writer.write(mol)
-                    writer.close()
-                except Exception as e:
-                    print(f"Error writing SDF file: {e}")
-                    return
+                sdf_filename = os.path.abspath(os.path.join(self._getExtraPath(), f"{file_name}.sdf"))
+                
+                outDir = os.path.abspath(self._getExtraPath())
+                args = '--smiles "{}" --output-directory "{}" --filename "{}"'.format(smile,outDir, file_name)
+                scriptPath=Plugin.getScriptsPath()
+                Plugin.runScript(self, "convert_smiles_to_sdf_script.py" ,args, env=AIZYNTHFINDER_DIC,cwd=None, scriptDir=scriptPath)
                 
                 cid, link  = self.getCIDFromSmiles(smile)
                 name = self.getMainNameFromCID(cid)
                 if name is not None:
                     name = name.lower()
+                else:
+                    name=smile
                 smallMolecule = SmallMolecule(smallMolFilename=sdf_filename)
                 smallMolecule.setMolName(name)
                 outputSmallMolecules.append(smallMolecule)

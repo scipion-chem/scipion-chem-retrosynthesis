@@ -44,3 +44,4 @@ if __name__ == "__main__":
 
     creator = ImageRouteCreator(args.inputJson, args.outputDir)
     creator.createImageRoutes()
+
