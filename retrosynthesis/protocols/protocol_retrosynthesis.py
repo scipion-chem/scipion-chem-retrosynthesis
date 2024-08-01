@@ -2,27 +2,19 @@
 
 # General imports 
 import gzip
-import re
-import shutil
-import os,sys,glob
-import subprocess
-import json
-import requests
+from urllib.request import urlopen
 
 # Specific imports
 from pyworkflow.protocol.params import PointerParam, STEPS_PARALLEL, StringParam
-from pwem.protocols import EMProtocol
 from pyworkflow.utils.path import moveFile, cleanPath
+from pwem.protocols import EMProtocol
+
 from pwchem.utils import *
-from retrosynthesis import Plugin
 from pwchem.constants import RDKIT_DIC
-import pyworkflow.object as pwobj
 from pwchem.objects import SmallMolecule, SetOfSmallMolecules
-from urllib.request import urlopen
+
 from retrosynthesis.constants import AIZYNTHFINDER_DIC
-
-
-RDKIT = 0
+from retrosynthesis import Plugin
 
 class ProtChemAiZynthFinder(EMProtocol):
 
