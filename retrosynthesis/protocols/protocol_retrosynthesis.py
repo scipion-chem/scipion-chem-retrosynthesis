@@ -2,6 +2,9 @@
 
 # General imports 
 import gzip
+import json
+import os
+import shutil
 from urllib.request import urlopen
 
 # Specific imports
