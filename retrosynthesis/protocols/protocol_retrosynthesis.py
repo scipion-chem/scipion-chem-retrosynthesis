@@ -1,10 +1,7 @@
 ################ VERÓNICA GAMO PAREJO ##############################
 
 # General imports 
-import gzip
-import json
-import os
-import shutil
+import gzip, json, os, shutil
 from urllib.request import urlopen
 
 # Specific imports

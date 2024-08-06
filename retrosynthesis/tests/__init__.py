@@ -24,4 +24,4 @@
 # *
 # **************************************************************************
 
-from .tests_retrosynthesis import * 
+from retrosynthesis.tests.tests_retrosynthesis import TestRetrosynthesis
