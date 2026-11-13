@@ -57,23 +57,64 @@ class Plugin(pwchem.Plugin):
 	########################### PACKAGE FUNCTIONS ###########################
 	@classmethod
 	def addAizynthfinder(cls, env, default=True):
-		""" This function installs Aizynthfinder's package. """
+		"""This function installs AiZynthFinder's package."""
+
 		# Instantiating install helper
-		installer = InstallHelper(AIZYNTHFINDER_DIC['name'], packageHome=cls.getVar(AIZYNTHFINDER_DIC['home']), packageVersion=AIZYNTHFINDER_DIC['version'])
+		installer = InstallHelper(
+			AIZYNTHFINDER_DIC['name'],
+			packageHome=cls.getVar(AIZYNTHFINDER_DIC['home']),
+			packageVersion=AIZYNTHFINDER_DIC['version']
+		)
 
-	
 		# Installing package
-		installer.getCondaEnvCommand(pythonVersion='3.9', binaryName=AIZYNTHFINDER_DIC['name'], binaryVersion=AIZYNTHFINDER_DIC['version']) \
-		.addCommand(f'{cls.getEnvActivationCommand(AIZYNTHFINDER_DIC)} && python -m pip install aizynthfinder[all] && download_public_data .')\
-		.addPackage(env, dependencies=['conda'], default=default)
+		installer.getCondaEnvCommand(
+			pythonVersion='3.11',
+			binaryName=AIZYNTHFINDER_DIC['name'],
+			binaryVersion=AIZYNTHFINDER_DIC['version']
+		) \
+			.addCommand(
+			f'{cls.getEnvActivationCommand(AIZYNTHFINDER_DIC)} && '
+			f'python -m pip install "numpy==1.26.4" && '
+			f'python -m pip install "aizynthfinder[all]" && '
+			f'python -m pip install --no-deps "pyarrow==25.0.1" && '
+			f'download_public_data .'
+		) \
+			.addPackage(env, dependencies=['conda'], default=default)
 
-
+	import subprocess
+	import traceback
 
 	@classmethod
 	def runAIZYNTH(cls, program, args, cwd=None):
-		""" Run AIZYNTH command from a given protocol. """
-		full_program = '%s && %s ' % (cls.getEnvActivationCommand(AIZYNTHFINDER_DIC), program)
-		run(full_program + args, env=cls.getEnviron(), cwd=cwd, shell=True)
+
+		full_program = '%s && %s %s' % (
+			cls.getEnvActivationCommand(AIZYNTHFINDER_DIC),
+			program,
+			args
+		)
+
+		cwd = os.path.abspath(cwd) if cwd else None
+		try:
+
+			result = subprocess.run(
+				full_program,
+				shell=True,
+				executable="/bin/bash",
+				cwd=cwd,
+				env=cls.getEnviron(),
+				stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE,
+				text=True
+			)
+
+			if result.returncode != 0:
+				raise Exception(
+					f"AiZynthFinder failed with return code {result.returncode}"
+				)
+
+		except Exception:
+			traceback.print_exc()
+			raise
 
 	@classmethod
 	def getPluginH(cls, path=""):

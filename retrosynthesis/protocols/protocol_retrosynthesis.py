@@ -1,7 +1,7 @@
 ################ VERÓNICA GAMO PAREJO ##############################
 
 # General imports 
-import gzip, json, os, shutil
+import gzip, json, os, shutil, csv, re
 from urllib.request import urlopen
 
 # Specific imports
@@ -43,28 +43,40 @@ class ProtChemAiZynthFinder(EMProtocol):
         self._insertFunctionStep('createOutputStep')
 
     def identifyStep(self):
-        myLigand=str(self.inputLigand)
+        myLigand = str(self.inputLigand)
+        ligand_file = None
+
         for mol in self.inputSet.get():
             if str(mol.getMolName()) in myLigand:
-                ligand_file=mol.getFileName()
+                ligand_file = mol.getFileName()
+                break
+
         if not ligand_file:
             raise ValueError("No ligand file provided.")
-        
-        ligand_smiles = self.getSMI(ligand_file,1)
+
+        ligand_smiles = self.getSMI(ligand_file, 1)
         print("SMILES for retrosynthesis:", ligand_smiles)
         self.runAiZynthFinder(ligand_smiles)
 
-            
     def getSMI(self, mol, nt):
-        ''' Generates a SMILES representation of a molecule from a given input file'''
+        """Generate a SMILES representation from a molecule file."""
         fnSmall = os.path.abspath(mol)
         fnRoot, ext = os.path.splitext(os.path.basename(fnSmall))
-
-        if ext != '.smi':
+        if ext == '.smi':
+            fnOut = fnSmall
+        else:
             outDir = os.path.abspath(self._getExtraPath())
             fnOut = os.path.abspath(self._getExtraPath(fnRoot + '.smi'))
-            args = ' -i "{}" -of smi -o {} --outputDir {} -nt {}'.format(fnSmall, fnOut, outDir, nt)
-            Plugin.runScript(self, 'rdkit_IO.py', args, env=RDKIT_DIC, cwd=outDir)    
+            args = ' -i "{}" -of smi -o "{}" --outputDir "{}" -nt {}'.format(
+                fnSmall, fnOut, outDir, nt
+            )
+            Plugin.runScript(
+                self,
+                'rdkit_IO.py',
+                args,
+                env=RDKIT_DIC,
+                cwd=outDir
+            )
         return self.parseSMI(fnOut)
         
     def parseSMI(self, smiFile):
@@ -77,7 +89,6 @@ class ProtChemAiZynthFinder(EMProtocol):
         return smi
     
     def runAiZynthFinder(self, smi):
-
         # SAVE SMILE TO TXT FILE
         smiles_file = self._getExtraPath("smiles.txt")
         with open(smiles_file, 'w') as f:
@@ -87,12 +98,15 @@ class ProtChemAiZynthFinder(EMProtocol):
         # RUN AIZYNTHFINDER
         relative_dir=Plugin.getHome()
         absolute_dir= os.path.join(relative_dir, "config.yml")
-        args = f"--config {absolute_dir} --smiles {smiles_file}"
-        Plugin.runAIZYNTH("aizynthcli", args)
+        args = f"--config {absolute_dir} --smiles {os.path.abspath(smiles_file)}"
+        Plugin.runAIZYNTH("aizynthcli", args, cwd=os.path.abspath(self._getExtraPath()))
 
         #JSON FILE 
         fnJson = self._getExtraPath("output.json.gz")
-        moveFile("output.json.gz", fnJson)
+
+        if not os.path.exists(fnJson):
+            raise Exception(f"Output JSON not found: {fnJson}")
+
         with gzip.open(fnJson, 'rb') as f_in:
             with open(self._getExtraPath("output.json"), 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
@@ -104,136 +118,180 @@ class ProtChemAiZynthFinder(EMProtocol):
         Plugin.runScript(self, "retrosynthesis_script.py" ,args, env=AIZYNTHFINDER_DIC,cwd=None, scriptDir=scriptPath)
         cleanPath(fnJson)
 
-
     def createOutputStep(self):
-        
-        outputSmallMolecules = SetOfSmallMolecules().create(outputPath=self._getPath(), suffix='SmallMols')
-        molecule_counter = 1
         file_path = self._getExtraPath("output.json")
 
         try:
             with open(file_path, 'r') as f:
                 data_json = json.load(f)
-            stock_info = data_json['data'][0]['stock_info']
-            smiles_list = list(stock_info.keys())
+
+            trees_info = data_json['data'][0]['trees']
+
         except FileNotFoundError:
-            print(f"Error: File '{file_path}' not found.")
-            return
-        except Exception as e:
-            print(f"Error opening JSON file: {e}")
-            return
+            raise Exception("AiZynthFinder output.json was not found.")
 
+        except (KeyError, IndexError) as e:
+            raise Exception("Could not find retrosynthesis routes in output.json: {}".format(e))
 
-        smiles_to_molecule_info = {}
-        print("-----------------INITIAL REACTANTS------------------")
-        for smile in smiles_list:
-                file_name=f"Molecule_{molecule_counter}"
-                sdf_filename = os.path.abspath(os.path.join(self._getExtraPath(), f"{file_name}.sdf"))
-                
+        # Collect terminal precursor molecules from one route.
+        def getTerminalPrecursors(node):
+            precursors = []
+
+            if node.get('type') == 'mol':
+                children = node.get('children', [])
+
+                # A molecule without children is a terminal precursor.
+                if not children:
+                    precursors.append({
+                        'smiles': node.get('smiles'),
+                        'in_stock': node.get('in_stock', False)
+                    })
+
+            # Continue traversing the route tree.
+            for child in node.get('children', []):
+                precursors.extend(getTerminalPrecursors(child))
+
+            return precursors
+
+        route_outputs = {}
+        routes_summary = []
+
+        for route_idx, route in enumerate(trees_info, start=1):
+
+            # Get terminal precursors belonging ONLY to this route.
+            precursors = getTerminalPrecursors(route)
+
+            # Remove entries without a SMILES.
+            precursors = [
+                p for p in precursors if p['smiles']
+            ]
+
+            if not precursors:
+                print("Route {} has no terminal precursors.".format(route_idx))
+                continue
+
+            # Route-level information from AiZynthFinder.
+            scores = route.get('scores', {})
+            metadata = route.get('metadata', {})
+
+            is_solved = metadata.get('is_solved', False)
+            score = scores.get('state score', None)
+            number_of_reactions = scores.get('number of reactions', None)
+
+            precursors_in_stock = sum(
+                1 for p in precursors if p['in_stock']
+            )
+
+            precursors_not_in_stock = len(precursors) - precursors_in_stock
+
+            # Save route information for JSON and CSV summaries.
+            route_info = {
+                'route': route_idx,
+                'solved': is_solved,
+                'score': score,
+                'reactions': number_of_reactions,
+                'precursors': len(precursors),
+                'precursors_in_stock': precursors_in_stock,
+                'precursors_not_in_stock': precursors_not_in_stock,
+                'precursor_smiles': [
+                    p['smiles'] for p in precursors
+                ]
+            }
+
+            routes_summary.append(route_info)
+
+            print("\n================ ROUTE {} ================".format(route_idx))
+            print("Solved: {}".format(is_solved))
+            print("Score: {}".format(score))
+            print("Number of reactions: {}".format(number_of_reactions))
+            print("Number of terminal precursors: {}".format(len(precursors)))
+            print("Precursors in stock: {}".format(precursors_in_stock))
+            print("Precursors not in stock: {}".format(precursors_not_in_stock))
+
+            # Create a separate SetOfSmallMolecules for this route.
+            outputRoute = SetOfSmallMolecules().create(
+                outputPath=self._getPath(),
+                suffix='Route{}'.format(route_idx)
+            )
+
+            for precursor_idx, precursor in enumerate(precursors, start=1):
+
+                smile = precursor['smiles']
+                in_stock = precursor['in_stock']
+
+                # Generate a unique SDF filename for this route and precursor.
+                file_name = "Route{}_Precursor{}".format(
+                    route_idx, precursor_idx
+                )
+
+                sdf_filename = os.path.abspath(
+                    self._getExtraPath(file_name + ".sdf")
+                )
+
                 outDir = os.path.abspath(self._getExtraPath())
-                args = '--smiles "{}" --output-directory "{}" --filename "{}"'.format(smile,outDir, file_name)
-                scriptPath=Plugin.getScriptsPath()
-                Plugin.runScript(self, "convert_smiles_to_sdf_script.py" ,args, env=AIZYNTHFINDER_DIC,cwd=None, scriptDir=scriptPath)
-                
-                cid, link  = self.getCIDFromSmiles(smile)
+
+                args = '--smiles "{}" --output-directory "{}" --filename "{}"'.format(
+                    smile, outDir, file_name
+                )
+
+                scriptPath = Plugin.getScriptsPath()
+
+                Plugin.runScript(
+                    self,
+                    "convert_smiles_to_sdf_script.py",
+                    args,
+                    env=AIZYNTHFINDER_DIC,
+                    cwd=None,
+                    scriptDir=scriptPath
+                )
+
+                # Retrieve molecule name from PubChem.
+                cid, link = self.getCIDFromSmiles(smile)
                 name = self.getMainNameFromCID(cid)
-                if name is not None:
+
+                if name:
                     name = name.lower()
                 else:
-                    name=smile
-                smallMolecule = SmallMolecule(smallMolFilename=sdf_filename)
-                smallMolecule.setMolName(name)
-                outputSmallMolecules.append(smallMolecule)
-                smiles_to_molecule_info[smile] = {
-                    'name': name,
-                    'counter': molecule_counter,
-                    'url': link
-                }
-                molecule_counter += 1 
-                print(f"{file_name} --> SMILES: {smile}  ||  NAME: {name} || URL: {link}")
+                    name = smile
 
-        outputSmallMolecules.updateMolClass()
-        self._defineOutputs(outputSmallMolecules=outputSmallMolecules)
+                display_name = self.getSafeMoleculeName(name)
 
-        trees_info=data_json['data'][0]['trees']
-        parent_child_relationships = {}
-        def extract_smiles_and_relationships(data, parent_smiles=None):
-            for tree in data:
-                smiles = tree.get('smiles')
-                if smiles and '>>' not in smiles:
-                    if parent_smiles:
-                        if parent_smiles not in parent_child_relationships:
-                            parent_child_relationships[parent_smiles] = {'parent': None, 'children': []}
-                        parent_child_relationships[parent_smiles]['children'].append(smiles)
-                        
-                        parent_child_relationships[smiles] = {'parent': parent_smiles, 'children': []}
-                    else:
-                        parent_child_relationships[smiles] = {'parent': None, 'children': []}
+                smallMolecule = SmallMolecule(
+                    smallMolFilename=sdf_filename
+                )
 
-                if 'children' in tree:
-                    if '>>' in smiles:
-                        extract_smiles_and_relationships(tree['children'], parent_smiles)
-                    else:
-                        extract_smiles_and_relationships(tree['children'], smiles)
+                smallMolecule.setMolName(display_name)
+                outputRoute.append(smallMolecule)
 
-        extract_smiles_and_relationships(trees_info)
+                print(
+                    "Precursor {}: {} | {} | SMILES: {}".format(
+                        precursor_idx,
+                        display_name,
+                        link,
+                        smile
+                    )
+                )
 
-        for smiles, relations in parent_child_relationships.items():
-            if smiles in smiles_to_molecule_info:
-                parent_info = smiles_to_molecule_info[smiles]
-                parent_counter = parent_info['counter']
-                parent_name = parent_info['name']
-                parent_url= parent_info['url']
-                parent_url = parent_url.replace("cids/TXT", "")
-            else:
-                molecule_counter += 1
-                try:
-                    cid_parent, parent_url = self.getCIDFromSmiles(smiles)
-                    parent_url = parent_url.replace("cids/TXT", "")
-                    parent_name = self.getMainNameFromCID(cid_parent)
-                except Exception as e:
-                    parent_name = "Unknown"  # Handle the case where CID retrieval fails
+            outputRoute.updateMolClass()
 
-                smiles_to_molecule_info[smiles] = {
-                    'name': parent_name,
-                    'counter': molecule_counter,
-                    'url': parent_url
-                }
-                parent_counter = molecule_counter
+            # Register this route as an independent protocol output.
+            route_name = 'outputRoute{}'.format(route_idx)
+            route_outputs[route_name] = outputRoute
 
-            children_info = []
-            for child in relations['children']:
-                if child in smiles_to_molecule_info:
-                    child_info = smiles_to_molecule_info[child]
-                    child_counter = child_info['counter']
-                    child_name = child_info['name']
-                    child_url= child_info['url']
-                    child_url = child_url.replace("cids/TXT", "")
-                else:
-                    molecule_counter += 1
-                    try:
-                        cid_child, child_url= self.getCIDFromSmiles(child)
-                        child_url = child_url.replace("cids/TXT", "")
-                        child_name = self.getMainNameFromCID(cid_child)
-                    except Exception as e:
-                        child_name = "Unknown"  # Handle the case where CID retrieval fails
+        if not route_outputs:
+            raise Exception(
+                "No retrosynthesis routes with terminal precursors were found."
+            )
 
-                    smiles_to_molecule_info[child] = {
-                        'name': child_name,
-                        'counter': molecule_counter,
-                        'url': child_url
-                    }
-                    child_counter = molecule_counter
+        # Register all route outputs.
+        self._defineOutputs(**route_outputs)
 
-                children_info.append((child_counter, child_name,child_url, child))
+        # Save route statistics.
+        self.saveRoutesSummary(routes_summary)
 
-            print("---------------------------------------------------------------------")
-            print(f"  Product: Molecule {parent_counter} - SMILES: {smiles} - NAME: {parent_name} - URL: {parent_url}")
-            if not children_info:
-                print("  It is an initial reactant")
-            else:
-                for i, (child_counter, child_name, child_url, child_smiles) in enumerate(children_info):
-                    print(f"  Reactant {i+1}: Molecule {child_counter} - - SMILES: {child_smiles} - NAME: {child_name} - URL: {child_url}")
+        print("\nRoute summary saved:")
+        print(self._getExtraPath("routes_summary.json"))
+        print(self._getPath("routes_summary.csv"))
 
 
     
@@ -262,5 +320,120 @@ class ProtChemAiZynthFinder(EMProtocol):
             main_name = None
         
         return main_name
-    
+
+    def saveRoutesSummary(self, routes_summary):
+        """Save retrosynthesis route statistics in JSON and CSV formats."""
+
+        # JSON: complete information for each route.
+        json_file = self._getExtraPath("routes_summary.json")
+
+        with open(json_file, 'w') as f:
+            json.dump(routes_summary, f, indent=4)
+
+        # CSV: compact table for easy comparison.
+        csv_file = self._getPath("routes_summary.csv")
+
+        fields = [
+            'route',
+            'solved',
+            'score',
+            'reactions',
+            'precursors',
+            'precursors_in_stock',
+            'precursors_not_in_stock',
+            'precursor_smiles'
+        ]
+        with open(csv_file, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fields)
+            writer.writeheader()
+
+            for route in routes_summary:
+                row = {
+                    field: route.get(field)
+                    for field in fields
+                }
+
+                row['precursor_smiles'] = '; '.join(
+                    route.get('precursor_smiles', [])
+                )
+
+                writer.writerow(row)
+
+    def getSafeMoleculeName(self, name):
+        """Replace characters that can cause problems in PyMOL object names."""
+        name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+        name = re.sub(r'_+', '_', name)
+        return name.strip('_')
+
+    # --------------------------- INFO functions -----------------------------------
+
+
+    def _methods(self):
+        methods = []
+        return methods
+
+    def _validate(self):
+         validations = []
+         return validations
+
+    def _warnings(self):
+         warnings = []
+         return warnings
+
+    def _summary(self):
+        """Display retrosynthesis statistics in the Scipion Summary tab."""
+
+        summary_file = self._getExtraPath("routes_summary.json")
+
+        if not os.path.exists(summary_file):
+            return ["Retrosynthesis route summary is not available yet."]
+
+        with open(summary_file, 'r') as f:
+            routes_summary = json.load(f)
+
+        if not routes_summary:
+            return ["No retrosynthesis routes were found."]
+
+        solved_routes = sum(
+            1 for route in routes_summary if route['solved']
+        )
+
+        total_routes = len(routes_summary)
+
+        summary = [
+            "Total routes: {}".format(total_routes),
+            "Route details:"
+        ]
+
+        for route in routes_summary:
+            summary.append("")
+            summary.append(
+                "Route {}: {}".format(
+                    route['route'],
+                    "Solved" if route['solved'] else "Unsolved"
+                )
+            )
+            summary.append("  Score: {}".format(route['score']))
+            summary.append("  Reaction steps: {}".format(route['reactions']))
+            summary.append("  Terminal precursors: {}".format(route['precursors']))
+            summary.append(
+                "  Precursors in stock: {}".format(
+                    route['precursors_in_stock']
+                )
+            )
+            summary.append(
+                "  Precursors not in stock: {}".format(
+                    route['precursors_not_in_stock']
+                )
+            )
+
+        summary.extend([
+            "",
+            "Detailed route information:",
+            "  routes_summary.json",
+            "  routes_summary.csv"
+        ])
+
+        return summary
+
     
