@@ -63,7 +63,23 @@ class TestRetrosynthesis(TestImportBase):
 
 	def test(self):
 		p = self._runAizynthfinder(inProt=self.protImportSmallMols)
-		self._waitOutput(p, 'outputSmallMolecules', sleepTime=10)
-		assertHandle(self.assertIsNotNone, getattr(p, 'outputSmallMolecules', None), cwd=p.getWorkingDir())
 
+		self._waitOutput(p, 'outputRoute1', sleepTime=10)
 
+		output_sets = [
+			value for name, value in vars(p).items()
+			if name.startswith('outputRoute') and value is not None
+		]
+
+		assertHandle(
+			self.assertGreater,
+			len(output_sets),
+			0,
+			cwd=p.getWorkingDir()
+		)
+
+		assertHandle(
+			self.assertTrue,
+			any(output_set.getSize() > 0 for output_set in output_sets),
+			cwd=p.getWorkingDir()
+		)
