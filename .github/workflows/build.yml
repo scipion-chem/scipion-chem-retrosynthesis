@@ -29,5 +29,5 @@ jobs:
           ref: ${{ github.head_ref }}
   
       - name: Install plugin from pull request
-        working-directory: ${{ github.workspace }}
-        run: ../scipion/scipion3 installp -p . --devel
+        working-directory: ${{ github.workspace }}/../
+        run: scipion/scipion3 installp -p . --devel
