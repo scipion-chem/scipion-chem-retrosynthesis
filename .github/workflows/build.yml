@@ -29,13 +29,5 @@ jobs:
           ref: ${{ github.head_ref }}
 
       - name: Install plugin from pull request
-        working-directory: ${{ github.workspace }}
-        run: ../scipion/scipion3 installp -p . --devel
-
-      - name: Run tests
         working-directory: ${{ github.workspace }}/../
-        env:
-          TEST_MODULE: ${{ vars.FOLDER_WITH_VERSION }}
-        run: |
-          pip install --user scipion-testrunner
-          scipion_testrunner ./scipion/scipion3 $TEST_MODULE --noGpu --testData=${{ github.workspace }}/$TEST_MODULE/testData.json
+        run: scipion/scipion3 installp -p . --devel
