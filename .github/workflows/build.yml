@@ -24,7 +24,7 @@ jobs:
         run: scipion/scipion3 installp -p scipion-chem/ --devel
 
       - name: Checkout repository
-        uses: actions/checkout@main
+        uses: actions/checkout@devel
         with:
           ref: ${{ github.head_ref }}
 
