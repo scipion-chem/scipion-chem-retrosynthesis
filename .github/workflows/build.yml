@@ -30,4 +30,4 @@ jobs:
 
       - name: Install plugin from pull request
         working-directory: ${{ github.workspace }}/../
-        run: scipion/scipion3 installp -p . --devel
+        run: scipion/scipion3 installp -p ${{ github.workspace }} --devel
