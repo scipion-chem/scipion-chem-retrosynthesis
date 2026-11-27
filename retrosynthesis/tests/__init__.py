@@ -23,3 +23,5 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
+from retrosynthesis.tests.tests_retrosynthesis import TestRetrosynthesis
