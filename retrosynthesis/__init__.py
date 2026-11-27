@@ -75,7 +75,7 @@ class Plugin(pwchem.Plugin):
 			.addCommand(
 			f'{cls.getEnvActivationCommand(AIZYNTHFINDER_DIC)} && '
 			f'python -m pip install "numpy==1.26.4" && '
-			f'python -m pip install "aizynthfinder[all]" && '
+			f'python -m pip install "aizynthfinder==4.4.1" && '
 			f'python -m pip install --no-deps "pyarrow==25.0.1" && '
 			f'download_public_data .'
 		) \
